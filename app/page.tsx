@@ -1,63 +1,105 @@
-import Image from "next/image";
+import Link from "next/link";
 
-export default function Home() {
+import { prisma, safeDbCall } from "@/lib/db";
+import { getDefaultSettingsMap } from "@/lib/site-content";
+
+export default async function Home() {
+  const [blocks, settings] = await Promise.all([
+    safeDbCall([], async () =>
+      prisma.homeBlock.findMany({
+        where: { visible: true },
+        orderBy: { orderIndex: "asc" },
+        take: 8,
+      }),
+    ),
+    getDefaultSettingsMap(),
+  ]);
+
+  const siteTitle = settings["site-title"] || "Hardwood Living";
+  const heroBadge = settings["hero-badge"] || "";
+  const heroTitle = settings["hero-title"] || "";
+  const heroDescription = settings["hero-description"] || "";
+  const primaryCtaLabel = settings["hero-primary-cta-label"] || "";
+  const primaryCtaHref = settings["hero-primary-cta-href"] || "";
+  const secondaryCtaLabel = settings["hero-secondary-cta-label"] || "";
+  const secondaryCtaHref = settings["hero-secondary-cta-href"] || "";
+  const blocksHeading = settings["home-blocks-heading"] || "Home Blocks";
+  const blocksSubheading = settings["home-blocks-subheading"] || "";
+  const emptyBlocksMessage = settings["home-blocks-empty-message"] || "";
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-white text-[#1f2937]">
+      <header className="border-b border-gray-200 px-6 py-4">
+        <div className="mx-auto flex max-w-6xl items-center justify-between">
+          <h1 className="text-2xl font-semibold">{siteTitle}</h1>
+          <Link href="/admin" className="rounded border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50">
+            Admin CMS
+          </Link>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </header>
+
+      {(heroBadge || heroTitle || heroDescription || primaryCtaLabel || secondaryCtaLabel) && (
+        <section className="bg-[#f4f1ec] px-6 py-20">
+          <div className="mx-auto max-w-6xl">
+            {heroBadge ? <p className="text-sm font-semibold tracking-[0.2em] text-[#8d6e4a]">{heroBadge}</p> : null}
+            {heroTitle ? (
+              <h2 className="mt-3 max-w-3xl text-5xl leading-tight font-semibold text-[#1f2937]">{heroTitle}</h2>
+            ) : null}
+            {heroDescription ? <p className="mt-6 max-w-2xl text-lg text-[#4b5563]">{heroDescription}</p> : null}
+            {(primaryCtaLabel || secondaryCtaLabel) && (
+              <div className="mt-8 flex flex-wrap gap-3">
+                {primaryCtaLabel ? (
+                  primaryCtaHref ? (
+                    <Link href={primaryCtaHref} className="rounded bg-[#2b8654] px-5 py-3 text-sm font-semibold text-white">
+                      {primaryCtaLabel}
+                    </Link>
+                  ) : (
+                    <span className="rounded bg-[#2b8654] px-5 py-3 text-sm font-semibold text-white">{primaryCtaLabel}</span>
+                  )
+                ) : null}
+                {secondaryCtaLabel ? (
+                  secondaryCtaHref ? (
+                    <Link
+                      href={secondaryCtaHref}
+                      className="rounded border border-[#2b8654] px-5 py-3 text-sm font-semibold text-[#2b8654]"
+                    >
+                      {secondaryCtaLabel}
+                    </Link>
+                  ) : (
+                    <span className="rounded border border-[#2b8654] px-5 py-3 text-sm font-semibold text-[#2b8654]">
+                      {secondaryCtaLabel}
+                    </span>
+                  )
+                ) : null}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      <main className="mx-auto max-w-6xl px-6 py-10">
+        {blocksHeading ? <h3 className="text-2xl font-semibold">{blocksHeading}</h3> : null}
+        {blocksSubheading ? <p className="mt-2 text-sm text-gray-600">{blocksSubheading}</p> : null}
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          {blocks.length === 0 ? (
+            emptyBlocksMessage ? (
+              <div className="rounded border border-dashed border-gray-300 p-6 text-sm text-gray-600">{emptyBlocksMessage}</div>
+            ) : null
+          ) : (
+            blocks.map((block) => (
+              <article key={block.id} className="rounded border border-gray-200 p-5">
+                <p className="text-xs uppercase tracking-wider text-gray-500">{block.callbackKey}</p>
+                <h4 className="mt-2 text-xl font-semibold">{block.header}</h4>
+                {block.subheader ? <p className="mt-1 text-gray-600">{block.subheader}</p> : null}
+                {block.content ? (
+                  <div
+                    className="mt-3 text-sm text-gray-600 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:text-lg [&_h3]:font-semibold [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:text-blue-600 [&_a]:underline"
+                    dangerouslySetInnerHTML={{ __html: block.content }}
+                  />
+                ) : null}
+              </article>
+            ))
+          )}
         </div>
       </main>
     </div>

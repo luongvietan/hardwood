@@ -1,0 +1,194 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Administrator {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  username     String   @unique
+  passwordHash String
+  role         String   @default("admin")
+  description  String?
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  status      String   @default("draft")
+  priority    String   @default("normal")
+  description String?
+  dueDate     DateTime?
+  visible     Boolean  @default(true)
+  orderIndex  Int      @default(0)
+  tasks       Task[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  projectId   String?
+  title       String
+  status      String   @default("todo")
+  assignee    String?
+  priority    String   @default("normal")
+  description String?
+  dueDate     DateTime?
+  visible     Boolean  @default(true)
+  orderIndex  Int      @default(0)
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model HomeBlock {
+  id          String   @id @default(cuid())
+  callbackKey String   @unique
+  header      String
+  subheader   String?
+  content     String?
+  imageUrl    String?
+  ctaLabel    String?
+  ctaHref     String?
+  visible     Boolean  @default(true)
+  orderIndex  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model PageStructure {
+  id              String          @id @default(cuid())
+  parentId        String?
+  title           String
+  slug            String          @unique
+  template        String?
+  content         String?
+  metaTitle       String?
+  metaDescription String?
+  visible         Boolean         @default(true)
+  orderIndex      Int             @default(0)
+  parent          PageStructure?  @relation("PageTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children        PageStructure[] @relation("PageTree")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  subject   String
+  body      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Category {
+  id          String      @id @default(cuid())
+  parentId    String?
+  name        String
+  slug        String      @unique
+  metaKeywords String?
+  metaDescription String?
+  metaTitle   String?
+  description String?
+  content     String?
+  imageUrl    String?
+  visible     Boolean     @default(true)
+  orderIndex  Int         @default(0)
+  parent      Category?   @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Category[]  @relation("CategoryTree")
+  products    Product[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Product {
+  id          String    @id @default(cuid())
+  categoryId  String?
+  name        String
+  slug        String    @unique
+  announce    String?
+  sku         String?
+  vendor      String?
+  price       Decimal?  @db.Decimal(10, 2)
+  listPrice   Decimal?  @db.Decimal(10, 2)
+  imageUrl    String?
+  technicalData String?
+  description String?
+  visible     Boolean   @default(true)
+  orderIndex  Int       @default(0)
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model LiteratureFolder {
+  id          String           @id @default(cuid())
+  name        String
+  slug        String           @unique
+  description String?
+  visible     Boolean          @default(true)
+  orderIndex  Int              @default(0)
+  items       LiteratureItem[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model LiteratureItem {
+  id          String            @id @default(cuid())
+  folderId    String?
+  title       String
+  slug        String            @unique
+  summary     String?
+  fileUrl     String?
+  imageUrl    String?
+  visible     Boolean           @default(true)
+  orderIndex  Int               @default(0)
+  folder      LiteratureFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+model Testimonial {
+  id         String   @id @default(cuid())
+  author     String
+  role       String?
+  quote      String
+  rating     Int?
+  visible    Boolean  @default(true)
+  orderIndex Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Phrase {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  locale    String   @default("en")
+  visible   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DefaultSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  groupName   String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
