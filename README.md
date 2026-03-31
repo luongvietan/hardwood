@@ -1,36 +1,82 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## Hardwood
 
-## Getting Started
+Next.js 16 + Prisma + PostgreSQL.
 
-First, run the development server:
+## Prerequisites
+
+- Node.js 20+
+- npm
+- Docker Desktop (for local PostgreSQL)
+
+## Quick Start (Recommended: Docker)
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Create environment file:
+
+```bash
+# macOS/Linux
+cp .env.example .env
+
+# Windows PowerShell
+Copy-Item .env.example .env
+```
+
+3. Start PostgreSQL container:
+
+```bash
+docker compose up -d postgres
+```
+
+4. Push schema and seed data:
+
+```bash
+npm run db:push
+npm run db:seed
+```
+
+5. Start development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Default Admin Account (Seed)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Email: `admin@hardwoodliving.com`
+- Password: `admin123456`
 
-## Learn More
+You can override these with environment variables before seeding:
+- `SEED_ADMIN_EMAIL`
+- `SEED_ADMIN_USERNAME`
+- `SEED_ADMIN_PASSWORD`
 
-To learn more about Next.js, take a look at the following resources:
+## Environment
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Default local connection string in `.env.example`:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`DATABASE_URL="postgresql://postgres:postgres@localhost:5432/hardwood?schema=public"`
 
-## Deploy on Vercel
+## Useful Commands
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `npm run dev` - start Next.js dev server
+- `npm run build` - build production bundle
+- `npm run start` - run production server
+- `npm run lint` - run ESLint
+- `npm run db:generate` - generate Prisma client
+- `npm run db:push` - sync Prisma schema to DB
+- `npm run db:seed` - seed initial data
+- `docker compose up -d postgres` - start PostgreSQL
+- `docker compose down` - stop containers
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Troubleshooting
+
+- `@prisma/client did not initialize yet`: run `npm run db:generate` (or reinstall dependencies, `postinstall` already generates client).
+- `P1001: Can't reach database server`: make sure Docker is running and `docker compose ps` shows `postgres` as `healthy`.
+- Login returns `503`: database is unavailable or misconfigured in `DATABASE_URL`.
