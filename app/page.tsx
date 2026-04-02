@@ -1,6 +1,11 @@
 import { Check, Facebook, Instagram, MessageCircle, Send, Twitter } from "lucide-react";
 
+import { BoutiqueExperienceSection } from "@/components/site/boutique-experience-section";
+import { FlooringWiseSection } from "@/components/site/flooring-wise-section";
+import { FreeConsultationSection } from "@/components/site/free-consultation-section";
 import { LookingForFloorSection } from "@/components/site/looking-for-floor-section";
+import { ProductsServicesGallerySection } from "@/components/site/products-services-gallery-section";
+import { SupplyToFinishSection } from "@/components/site/supply-to-finish-section";
 import { SiteShell } from "@/components/site/site-shell";
 
 const categories = ["Hardwoods", "Engineered", "Laminates", "Vinyl", "Mats"] as const;
@@ -113,92 +118,18 @@ export default function Home() {
 
       <LookingForFloorSection />
 
-      <section className="w-full bg-gray-100 py-16 lg:py-24">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-12">
-            <div className="space-y-8 lg:col-span-5">
-              <div>
-                <h3 className="mb-4 text-base font-bold uppercase tracking-wide text-gray-800 sm:text-lg">
-                  Residential
-                </h3>
-                <div className="h-48 overflow-hidden rounded-lg bg-gray-300 sm:h-56">
-                  <img
-                    src="https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=500&h=400&fit=crop"
-                    alt="Residential"
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-              </div>
+      
 
-              <div>
-                <h3 className="mb-4 text-base font-bold uppercase tracking-wide text-gray-800 sm:text-lg">
-                  Strata Buildings
-                </h3>
-                <div className="h-48 overflow-hidden rounded-lg bg-gray-300 sm:h-56">
-                  <img
-                    src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=500&h=400&fit=crop"
-                    alt="Strata Buildings"
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-              </div>
-            </div>
+      <ProductsServicesGallerySection />
 
-            <div className="space-y-8 lg:col-span-2">
-              <div>
-                <h3 className="mb-4 text-base font-bold uppercase tracking-wide text-gray-800 sm:text-lg">
-                  Quality It Finish
-                </h3>
-                <ul className="space-y-2 text-sm text-gray-700">
-                  {[
-                    "Home Owners",
-                    "Designers",
-                    "Builders",
-                    "Contractors",
-                    "Property Managers",
-                    "Developers",
-                    "Restoration",
-                    "Renovators",
-                  ].map((item) => (
-                    <li key={item} className="flex items-center gap-2">
-                      <Check className="h-4 w-4 flex-shrink-0 text-orange-500" />
-                      <span className="text-xs sm:text-sm">{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
+      <BoutiqueExperienceSection />
 
-            <div className="space-y-8 lg:col-span-5">
-              <div>
-                <h3 className="mb-4 text-base font-bold uppercase tracking-wide text-gray-800 sm:text-lg">
-                  Commercial
-                </h3>
-                <div className="h-48 overflow-hidden rounded-lg bg-gray-300 sm:h-56">
-                  <img
-                    src="https://images.unsplash.com/photo-1585355731055-d0b0165eefac?w=500&h=400&fit=crop"
-                    alt="Commercial"
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-              </div>
+      <SupplyToFinishSection />
 
-              <div>
-                <h3 className="mb-4 text-base font-bold uppercase tracking-wide text-gray-800 sm:text-lg">
-                  New Construction
-                </h3>
-                <div className="h-48 overflow-hidden rounded-lg bg-gray-300 sm:h-56">
-                  <img
-                    src="https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=500&h=400&fit=crop"
-                    alt="New Construction"
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      <FreeConsultationSection />
+
+      <FlooringWiseSection />
+
     </SiteShell>
   );
 }
