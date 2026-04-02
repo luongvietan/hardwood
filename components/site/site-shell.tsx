@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Leaf } from "lucide-react";
 
 import { prisma, safeDbCall } from "@/lib/db";
+import { SiteFooter } from "@/components/site/site-footer";
 
 function BrandLogo({ compact }: { compact?: boolean }) {
   return (
@@ -78,6 +79,16 @@ export async function SiteShell({
   }
 
   const topLevel = navItems.filter((item) => !item.parentId);
+
+  const footerNav = [
+    { label: "Products", href: "/products" },
+    { label: "Best Value", href: "/best-value" },
+    { label: "On Sale", href: "/on-sale" },
+    { label: "Service", href: "/service" },
+    { label: "Reviews", href: "/reviews" },
+    { label: "Us", href: "/us" },
+    { label: "Contact Us", href: "mailto:info@hardwoodliving.com" },
+  ];
 
   const navLinkClass = heroLayout
     ? "text-[11px] font-bold uppercase tracking-[0.2em] text-gray-900 transition hover:text-[var(--brand-orange)] sm:text-xs"
@@ -208,13 +219,7 @@ export async function SiteShell({
 
       <main className="w-full flex-1">{children}</main>
 
-      <footer className="w-full bg-gray-800 py-12 text-white">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="text-center text-sm text-gray-400">
-            <p>&copy; 2024 Hardwood Living. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter links={footerNav} />
     </div>
   );
 }

@@ -6,6 +6,8 @@ import { FreeConsultationSection } from "@/components/site/free-consultation-sec
 import { LookingForFloorSection } from "@/components/site/looking-for-floor-section";
 import { ProductsServicesGallerySection } from "@/components/site/products-services-gallery-section";
 import { SupplyToFinishSection } from "@/components/site/supply-to-finish-section";
+import { ProductsSaleBestValueSection } from "@/components/site/products-sale-best-value-section";
+import { WhyHardwoodlivingSection } from "@/components/site/why-hardwoodliving-section";
 import { SiteShell } from "@/components/site/site-shell";
 
 const categories = ["Hardwoods", "Engineered", "Laminates", "Vinyl", "Mats"] as const;
@@ -129,6 +131,10 @@ export default function Home() {
       <FreeConsultationSection />
 
       <FlooringWiseSection />
+
+      <WhyHardwoodlivingSection />
+
+      <ProductsSaleBestValueSection />
 
     </SiteShell>
   );
