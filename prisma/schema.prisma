@@ -125,6 +125,7 @@ model Product {
   price       Decimal?  @db.Decimal(10, 2)
   listPrice   Decimal?  @db.Decimal(10, 2)
   imageUrl    String?
+  imageUrls   String[]  @default([])
   boxContents String?
   collection  String?
   dimensions  String?

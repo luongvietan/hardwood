@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { requireAdminSession } from "@/lib/auth";
 import { getResourceConfig, type ResourceKey } from "@/lib/admin/resources";
-import { createResource, listResource } from "@/lib/admin/service";
+import { createResource, listResource, updateResource } from "@/lib/admin/service";
 
 function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -40,6 +40,12 @@ export async function POST(req: NextRequest, context: { params: Promise<{ resour
 
   const body = (await req.json()) as Record<string, string | number | boolean | null>;
   try {
+    if (body.id) {
+      const id = String(body.id);
+      const { id: _ignored, ...rest } = body;
+      const updated = await updateResource(resource as ResourceKey, id, rest);
+      return NextResponse.json({ item: updated, updated: true });
+    }
     const created = await createResource(resource as ResourceKey, body);
     return NextResponse.json({ item: created });
   } catch (error) {

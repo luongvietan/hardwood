@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { SiteShell } from "@/components/site/site-shell";
+import { ProductGallery } from "@/components/site/product-gallery";
 import { prisma, safeDbCall } from "@/lib/db";
 
 export default async function ProductDetailPage({
@@ -24,6 +25,7 @@ export default async function ProductDetailPage({
         announce: true,
         description: true,
         imageUrl: true,
+        imageUrls: true,
         boxContents: true,
         collection: true,
         dimensions: true,
@@ -48,6 +50,11 @@ export default async function ProductDetailPage({
   if (!product) {
     notFound();
   }
+
+  const images = [
+    ...(Array.isArray(product.imageUrls) ? product.imageUrls : []),
+    ...(product.imageUrl ? [product.imageUrl] : []),
+  ];
 
   const details = [
     { label: "Box Contents", value: product.boxContents },
@@ -79,15 +86,7 @@ export default async function ProductDetailPage({
     <SiteShell>
       <section className="bg-white px-6 py-12">
         <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
-            {product.imageUrl ? (
-              <img src={product.imageUrl} alt={product.name} className="h-full w-full object-cover" />
-            ) : (
-              <div className="flex h-full min-h-[420px] items-center justify-center text-sm text-gray-500">
-                No image
-              </div>
-            )}
-          </div>
+          <ProductGallery images={images} alt={product.name} />
           <div className="space-y-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gray-500">

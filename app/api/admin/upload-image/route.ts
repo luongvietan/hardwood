@@ -1,8 +1,7 @@
 import { randomUUID } from "crypto";
-import { mkdir, writeFile } from "fs/promises";
 import path from "path";
-
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 import { requireAdminSession } from "@/lib/auth";
 
@@ -37,16 +36,38 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Image exceeds 5MB limit" }, { status: 400 });
   }
 
-  const uploadDir = path.join(process.cwd(), "public", "uploads");
-  await mkdir(uploadDir, { recursive: true });
-
   const extension = path.extname(file.name) || ".jpg";
   const base = sanitizeFilename(path.basename(file.name, extension));
   const filename = `${base}-${randomUUID()}${extension.toLowerCase()}`;
-  const filePath = path.join(uploadDir, filename);
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  await writeFile(filePath, buffer);
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey) {
+    return NextResponse.json({ error: "Supabase configuration missing" }, { status: 500 });
+  }
 
-  return NextResponse.json({ url: `/uploads/${filename}` });
+  const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false },
+  });
+
+  const bucket = "product-images";
+  const objectPath = `products/${filename}`;
+
+  const { error: uploadError } = await supabase.storage.from(bucket).upload(objectPath, buffer, {
+    contentType: file.type,
+    upsert: false,
+  });
+
+  if (uploadError) {
+    return NextResponse.json({ error: uploadError.message }, { status: 400 });
+  }
+
+  const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(objectPath);
+  const publicUrl = publicData?.publicUrl;
+  if (!publicUrl) {
+    return NextResponse.json({ error: "Could not generate public URL" }, { status: 500 });
+  }
+
+  return NextResponse.json({ url: publicUrl });
 }

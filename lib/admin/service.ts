@@ -4,7 +4,7 @@ import { ADMIN_RESOURCES, type AdminResource, type ResourceKey } from "@/lib/adm
 
 const PROTECTED_PAGE_SLUGS = new Set(["store"]);
 
-type Primitive = string | number | boolean | null;
+type Primitive = string | number | boolean | null | string[];
 
 type QueryRecord = Record<string, Primitive>;
 
@@ -31,6 +31,29 @@ function toBoolean(value: unknown) {
 function normalizeValue(type: string, value: unknown): Primitive {
   if (value === undefined) {
     return null;
+  }
+  if (type === "imageList") {
+    if (value === null || value === "") {
+      return [];
+    }
+    if (Array.isArray(value)) {
+      return value.map((item) => String(item)).filter((item) => item.trim().length > 0);
+    }
+    if (typeof value === "string") {
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) {
+          return parsed.map((item) => String(item)).filter((item) => item.trim().length > 0);
+        }
+      } catch {
+        // ignore JSON parse
+      }
+      return value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+    return [];
   }
   if (value === null || value === "") {
     return null;

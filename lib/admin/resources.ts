@@ -6,7 +6,8 @@ export type FieldType =
   | "date"
   | "select"
   | "email"
-  | "password";
+  | "password"
+  | "imageList";
 
 export type AdminField = {
   key: string;
@@ -189,6 +190,7 @@ const resources = {
       { key: "price", label: "Price", type: "number", list: true },
       { key: "listPrice", label: "List Price", type: "number" },
       { key: "imageUrl", label: "Image URL", type: "text" },
+      { key: "imageUrls", label: "Gallery Images", type: "imageList" },
       { key: "boxContents", label: "Box Contents", type: "text", required: true },
       { key: "collection", label: "Collection", type: "text", required: true },
       { key: "dimensions", label: "Dimensions", type: "text", required: true },

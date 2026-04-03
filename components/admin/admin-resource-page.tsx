@@ -7,7 +7,8 @@ import {
   type ResourceKey,
   ADMIN_RESOURCES,
 } from "@/lib/admin/resources";
-import { RichTextEditor } from "@/components/admin/rich-text-editor";
+import { AdminFieldControl } from "@/components/admin/admin-field-control";
+import { ProductForm } from "@/components/admin/product-form";
 
 type ItemRecord = Record<string, unknown> & {
   id: string;
@@ -28,9 +29,11 @@ type HierarchyItem = {
 const PROTECTED_PAGES = new Set(["store"]);
 
 function defaultForm(fields: AdminField[]) {
-  const data: Record<string, string | number | boolean> = {};
+  const data: Record<string, string | number | boolean | string[]> = {};
   for (const field of fields) {
-    if (field.type === "boolean") {
+    if (field.type === "imageList") {
+      data[field.key] = [];
+    } else if (field.type === "boolean") {
       data[field.key] = true;
     } else if (field.type === "number") {
       data[field.key] = 0;
@@ -41,20 +44,17 @@ function defaultForm(fields: AdminField[]) {
   return data;
 }
 
-function isImageField(field: AdminField) {
-  const key = field.key.toLowerCase();
-  const label = field.label.toLowerCase();
-  return key.includes("image") || label.includes("image");
-}
-
 export function AdminResourcePage({ resourceKey }: { resourceKey: ResourceKey }) {
   const isHierarchyResource = resourceKey === "pages-structure" || resourceKey === "categories";
+  const isProductResource = resourceKey === "products";
   const config: AdminResource = ADMIN_RESOURCES[resourceKey];
   const [items, setItems] = useState<ItemRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [currentId, setCurrentId] = useState<string | null>(null);
-  const [form, setForm] = useState<Record<string, string | number | boolean>>(defaultForm(config.fields));
+  const [form, setForm] = useState<Record<string, string | number | boolean | string[]>>(
+    defaultForm(config.fields),
+  );
   const [relations, setRelations] = useState<Record<string, Array<{ value: string; label: string }>>>({});
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const editorSectionRef = useRef<HTMLDivElement | null>(null);
@@ -133,15 +133,15 @@ export function AdminResourcePage({ resourceKey }: { resourceKey: ResourceKey })
     let cancelled = false;
 
     async function bootstrap() {
-      const [listRes, optionsRes] = await Promise.all([
-        fetch(`/api/admin/${resourceKey}`),
-        fetch(`/api/admin/${resourceKey}/options`),
-      ]);
+      const listRes = await fetch(`/api/admin/${resourceKey}`);
+      const optionsRes = isProductResource
+        ? null
+        : await fetch(`/api/admin/${resourceKey}/options`);
       if (cancelled) {
         return;
       }
       const listData = await listRes.json();
-      const optionsData = await optionsRes.json();
+      const optionsData = optionsRes ? await optionsRes.json() : { options: {} };
       if (cancelled) {
         return;
       }
@@ -173,6 +173,10 @@ export function AdminResourcePage({ resourceKey }: { resourceKey: ResourceKey })
     for (const field of config.fields) {
       if (field.type === "password") {
         next[field.key] = "";
+        continue;
+      }
+      if (field.type === "imageList") {
+        next[field.key] = (item[field.key] as string[]) ?? [];
         continue;
       }
       next[field.key] = (item[field.key] as string | number | boolean) ?? next[field.key];
@@ -217,12 +221,13 @@ export function AdminResourcePage({ resourceKey }: { resourceKey: ResourceKey })
   }
 
   async function onSubmit() {
-    const url = currentId ? `/api/admin/${resourceKey}/${currentId}` : `/api/admin/${resourceKey}`;
-    const method = currentId ? "PATCH" : "POST";
+    const url = `/api/admin/${resourceKey}`;
+    const method = "POST";
+    const payload = currentId ? { ...form, id: currentId } : form;
     const res = await fetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify(payload),
     });
     if (!res.ok) {
       const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -631,146 +636,47 @@ export function AdminResourcePage({ resourceKey }: { resourceKey: ResourceKey })
             </button>
           </div>
           <div className="space-y-5 p-5">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {config.fields.map((field) => {
-                const value = form[field.key];
-                const fieldColSpan = field.type === "textarea" ? "md:col-span-2 xl:col-span-3" : "";
-                const selectOptions =
-                  field.key === "parentId" && isHierarchyResource
-                    ? hierarchyOptions.filter((opt) => {
-                        const current = currentId ? String(currentId) : "";
-                        if (!current) return true;
-                        if (opt.value === current) return false;
-                        const descendants = descendantMap.get(current);
-                        return !descendants?.has(opt.value);
-                      })
-                    : relations[field.key] ?? [];
+            {isProductResource ? (
+              <ProductForm
+                fields={config.fields}
+                form={form}
+                relations={relations}
+                setForm={setForm}
+                uploadImage={uploadImage}
+              />
+            ) : (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {config.fields.map((field) => {
+                  const value = form[field.key];
+                  const fieldColSpan = field.type === "textarea" ? "md:col-span-2 xl:col-span-3" : "";
+                  const selectOptions =
+                    field.key === "parentId" && isHierarchyResource
+                      ? hierarchyOptions.filter((opt) => {
+                          const current = currentId ? String(currentId) : "";
+                          if (!current) return true;
+                          if (opt.value === current) return false;
+                          const descendants = descendantMap.get(current);
+                          return !descendants?.has(opt.value);
+                        })
+                      : relations[field.key] ?? [];
 
-                return (
-                  <div key={field.key} className={`space-y-1.5 ${fieldColSpan}`}>
-                    <label htmlFor={field.key} className="text-sm font-medium text-slate-700">
-                      {field.label}
-                    </label>
-                    {field.type === "textarea" ? (
-                      <RichTextEditor
-                        id={field.key}
-                        value={String(value ?? "")}
-                        onImageUpload={uploadImage}
-                        onChange={(nextValue) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            [field.key]: nextValue,
-                          }))
-                        }
+                  return (
+                    <div key={field.key} className={`space-y-1.5 ${fieldColSpan}`}>
+                      <label htmlFor={field.key} className="text-sm font-medium text-slate-700">
+                        {field.label}
+                      </label>
+                      <AdminFieldControl
+                        field={field}
+                        value={value}
+                        selectOptions={selectOptions}
+                        setForm={setForm}
+                        uploadImage={uploadImage}
                       />
-                    ) : field.type === "boolean" ? (
-                      <select
-                        id={field.key}
-                        className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none ring-slate-300 focus:ring"
-                        value={value ? "true" : "false"}
-                        onChange={(e) => setForm((prev) => ({ ...prev, [field.key]: e.target.value === "true" }))}
-                      >
-                        <option value="true">Visible</option>
-                        <option value="false">Hidden</option>
-                      </select>
-                    ) : field.type === "select" ? (
-                      <select
-                        id={field.key}
-                        className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none ring-slate-300 focus:ring"
-                        value={String(value ?? "")}
-                        onChange={(e) => setForm((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                      >
-                        <option value="">- Top Level -</option>
-                        {selectOptions.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : field.type === "text" && isImageField(field) ? (
-                      <div className="space-y-2">
-                        <input
-                          id={field.key}
-                          className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none ring-slate-300 focus:ring"
-                          type="text"
-                          value={String(value ?? "")}
-                          placeholder="/uploads/example.jpg or https://..."
-                          onChange={(e) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              [field.key]: e.target.value,
-                            }))
-                          }
-                        />
-                        <div className="flex items-center gap-2">
-                          <label
-                            htmlFor={`${field.key}-upload`}
-                            className="inline-flex h-9 cursor-pointer items-center rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-700 hover:bg-slate-100"
-                          >
-                            Upload image
-                          </label>
-                          <input
-                            id={`${field.key}-upload`}
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(event) => {
-                              const file = event.target.files?.[0];
-                              if (!file) {
-                                return;
-                              }
-                              void uploadImage(file).then((url) => {
-                                if (!url) {
-                                  return;
-                                }
-                                setForm((prev) => ({
-                                  ...prev,
-                                  [field.key]: url,
-                                }));
-                              });
-                              event.currentTarget.value = "";
-                            }}
-                          />
-                          {value ? (
-                            <a
-                              href={String(value)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-xs text-slate-500 underline"
-                            >
-                              Preview
-                            </a>
-                          ) : null}
-                        </div>
-                      </div>
-                    ) : (
-                      <input
-                        id={field.key}
-                        className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none ring-slate-300 focus:ring"
-                        type={
-                          field.type === "number"
-                            ? "number"
-                            : field.type === "date"
-                              ? "date"
-                              : field.type === "email"
-                                ? "email"
-                                : field.type === "password"
-                                  ? "password"
-                                  : "text"
-                        }
-                        value={String(value ?? "")}
-                        onChange={(e) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            [field.key]: field.type === "number" ? Number(e.target.value || 0) : e.target.value,
-                          }))
-                        }
-                      />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             <div className="flex items-center justify-between border-t pt-4">
               <button
                 className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
