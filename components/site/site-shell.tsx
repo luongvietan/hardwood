@@ -37,14 +37,14 @@ export async function SiteShell({
     prisma.pageStructure.findMany({
       where: { visible: true },
       orderBy: { orderIndex: "asc" },
-      select: { id: true, title: true, slug: true, parentId: true },
+      select: { id: true, title: true, slug: true, parentId: true, orderIndex: true },
     }),
   );
   const categories = await safeDbCall([], async () =>
     prisma.category.findMany({
       where: { visible: true },
       orderBy: { orderIndex: "asc" },
-      select: { id: true, name: true, slug: true },
+      select: { id: true, name: true, slug: true, parentId: true, orderIndex: true },
     }),
   );
 
@@ -65,20 +65,77 @@ export async function SiteShell({
           href: page.slug.startsWith("/") ? page.slug : `/${page.slug}`,
           parentId: page.parentId,
           slug: page.slug,
+          orderIndex: page.orderIndex ?? 0,
         }))
-      : fallbackNav.map((item) => ({ ...item, parentId: null as string | null, slug: item.href }));
+      : fallbackNav.map((item, index) => ({
+          ...item,
+          parentId: null as string | null,
+          slug: item.href,
+          orderIndex: index,
+        }));
 
-  const childMap = new Map<string, typeof navItems>();
+  type NavNode = (typeof navItems)[number] & { children: NavNode[] };
+  const nodeMap = new Map<string, NavNode>();
   for (const item of navItems) {
-    if (!item.parentId) {
-      continue;
-    }
-    const list = childMap.get(item.parentId) ?? [];
-    list.push(item);
-    childMap.set(item.parentId, list);
+    nodeMap.set(item.id, { ...item, children: [] });
   }
+  const roots: NavNode[] = [];
+  for (const node of nodeMap.values()) {
+    if (node.parentId && nodeMap.has(String(node.parentId))) {
+      nodeMap.get(String(node.parentId))?.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+  const sortNodes = (list: NavNode[]) => {
+    list.sort((a, b) => {
+      if (a.orderIndex !== b.orderIndex) {
+        return a.orderIndex - b.orderIndex;
+      }
+      return a.label.localeCompare(b.label);
+    });
+    list.forEach((node) => sortNodes(node.children));
+  };
+  sortNodes(roots);
+  const topLevel = roots;
 
-  const topLevel = navItems.filter((item) => !item.parentId);
+  type CategoryNode = {
+    id: string;
+    label: string;
+    href: string;
+    parentId: string | null;
+    orderIndex: number;
+    children: CategoryNode[];
+  };
+  const categoryMap = new Map<string, CategoryNode>();
+  for (const category of categories) {
+    categoryMap.set(String(category.id), {
+      id: String(category.id),
+      label: category.name,
+      href: `/products/${category.slug}`,
+      parentId: category.parentId ? String(category.parentId) : null,
+      orderIndex: category.orderIndex ?? 0,
+      children: [],
+    });
+  }
+  const categoryRoots: CategoryNode[] = [];
+  for (const node of categoryMap.values()) {
+    if (node.parentId && categoryMap.has(node.parentId)) {
+      categoryMap.get(node.parentId)?.children.push(node);
+    } else {
+      categoryRoots.push(node);
+    }
+  }
+  const sortCategoryNodes = (list: CategoryNode[]) => {
+    list.sort((a, b) => {
+      if (a.orderIndex !== b.orderIndex) {
+        return a.orderIndex - b.orderIndex;
+      }
+      return a.label.localeCompare(b.label);
+    });
+    list.forEach((node) => sortCategoryNodes(node.children));
+  };
+  sortCategoryNodes(categoryRoots);
 
   const footerNav = [
     { label: "Products", href: "/products" },
@@ -98,16 +155,38 @@ export async function SiteShell({
     ? "relative z-20 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] font-bold uppercase tracking-wide text-gray-800 sm:gap-x-7"
     : "relative z-20 hidden flex-wrap items-center gap-6 text-xs font-bold uppercase tracking-wide text-gray-800 lg:flex";
 
+  const renderFlyout = (
+    items: Array<NavNode | CategoryNode>,
+    isRoot = false,
+  ): React.ReactNode => (
+    <div
+      className={`absolute z-30 hidden min-w-[210px] flex-col gap-1 rounded border border-gray-200 bg-white p-2 text-[11px] font-semibold uppercase text-gray-700 shadow-lg ${
+        isRoot ? "left-0 top-full group-hover:flex" : "left-full top-0 group-hover/item:flex"
+      }`}
+    >
+      {items.map((child) => {
+        const hasChildren = child.children.length > 0;
+        return (
+          <div key={child.id} className="relative group/item">
+            <Link
+              href={child.href}
+              className="flex items-center justify-between rounded px-2 py-1 hover:bg-orange-50 hover:text-orange-600"
+            >
+              <span>{child.label}</span>
+              {hasChildren ? <span className="text-xs text-gray-400">+</span> : null}
+            </Link>
+            {hasChildren ? renderFlyout(child.children, false) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+
   const renderNavLinks = () =>
     topLevel.map((item) => {
       const slugKey = String(item.slug ?? "").replace(/^\//, "");
       const isStore = slugKey === "store";
-      const storeChildren = categories.map((category) => ({
-        id: category.id,
-        label: category.name,
-        href: `/products/${category.slug}`,
-      }));
-      const children = isStore ? storeChildren : childMap.get(item.id) ?? [];
+      const children = isStore ? categoryRoots : item.children ?? [];
       if (children.length === 0) {
         return (
           <Link key={item.id} href={item.href} className={navLinkClass}>
@@ -120,17 +199,7 @@ export async function SiteShell({
           <Link href={item.href} className={navLinkClass}>
             {item.label}
           </Link>
-          <div className="absolute left-0 top-full z-30 hidden min-w-[190px] flex-col gap-1 rounded border border-gray-200 bg-white p-2 text-[11px] font-semibold uppercase text-gray-700 shadow-lg group-hover:flex">
-            {children.map((child) => (
-              <Link
-                key={child.id}
-                href={child.href}
-                className="rounded px-2 py-1 hover:bg-orange-50 hover:text-orange-600"
-              >
-                {child.label}
-              </Link>
-            ))}
-          </div>
+          {renderFlyout(children, true)}
         </div>
       );
     });

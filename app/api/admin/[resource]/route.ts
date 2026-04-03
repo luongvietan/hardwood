@@ -39,6 +39,15 @@ export async function POST(req: NextRequest, context: { params: Promise<{ resour
   }
 
   const body = (await req.json()) as Record<string, string | number | boolean | null>;
-  const created = await createResource(resource as ResourceKey, body);
-  return NextResponse.json({ item: created });
+  try {
+    const created = await createResource(resource as ResourceKey, body);
+    return NextResponse.json({ item: created });
+  } catch (error) {
+    const err = error as { code?: string; meta?: { target?: string[] } };
+    if (err?.code === "P2002") {
+      const target = err.meta?.target?.join(", ") ?? "unique field";
+      return NextResponse.json({ error: `Duplicate value for ${target}.` }, { status: 409 });
+    }
+    return NextResponse.json({ error: "Create failed" }, { status: 500 });
+  }
 }

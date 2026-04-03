@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-
 import {
   type AdminField,
   type AdminResource,
@@ -10,38 +9,23 @@ import {
 } from "@/lib/admin/resources";
 import { RichTextEditor } from "@/components/admin/rich-text-editor";
 
-type ItemRecord = Record<string, unknown> & { id: string };
-type HierarchyItem = { item: ItemRecord; depth: number };
+type ItemRecord = Record<string, unknown> & {
+  id: string;
+  parentId?: string | number;
+  orderIndex?: number;
+  title?: string;
+  name?: string;
+  slug?: string;
+};
+type HierarchyItem = {
+  item: ItemRecord;
+  depth: number;
+  hasChildren: boolean;
+  isLastChild: boolean;
+  orderLabel: string;
+};
 
 const PROTECTED_PAGES = new Set(["store"]);
-
-function readValue(
-  item: ItemRecord,
-  field: AdminField,
-  relations: Record<string, Array<{ value: string; label: string }>>,
-) {
-  const value = item[field.key];
-  if (field.type === "boolean") {
-    return value ? (
-      <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
-        Visible
-      </span>
-    ) : (
-      <span className="inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700">
-        Hidden
-      </span>
-    );
-  }
-  if (field.type === "select") {
-    const options = relations[field.key] ?? [];
-    const matched = options.find((opt) => opt.value === String(value ?? ""));
-    return matched?.label ?? String(value ?? "");
-  }
-  if (field.type === "date" && value) {
-    return new Date(String(value)).toLocaleDateString();
-  }
-  return String(value ?? "");
-}
 
 function defaultForm(fields: AdminField[]) {
   const data: Record<string, string | number | boolean> = {};
@@ -63,70 +47,8 @@ function isImageField(field: AdminField) {
   return key.includes("image") || label.includes("image");
 }
 
-function buildHierarchy(items: ItemRecord[]): HierarchyItem[] {
-  const nodes = new Map<string, { item: ItemRecord; children: string[] }>();
-  for (const item of items) {
-    nodes.set(item.id, { item, children: [] });
-  }
-  const roots: string[] = [];
-  for (const item of items) {
-    const parentId = item.parentId ? String(item.parentId) : "";
-    if (parentId && nodes.has(parentId)) {
-      nodes.get(parentId)?.children.push(item.id);
-    } else {
-      roots.push(item.id);
-    }
-  }
-
-  const sortIds = (ids: string[]) =>
-    ids.sort((a, b) => {
-      const aItem = nodes.get(a)?.item;
-      const bItem = nodes.get(b)?.item;
-      const aOrder = Number(aItem?.orderIndex ?? 0);
-      const bOrder = Number(bItem?.orderIndex ?? 0);
-      if (aOrder !== bOrder) {
-        return aOrder - bOrder;
-      }
-      const aTitle = String(aItem?.title ?? "");
-      const bTitle = String(bItem?.title ?? "");
-      return aTitle.localeCompare(bTitle);
-    });
-
-  for (const node of nodes.values()) {
-    node.children = sortIds(node.children);
-  }
-  const sortedRoots = sortIds(roots);
-
-  const flat: HierarchyItem[] = [];
-  const visiting = new Set<string>();
-  const visited = new Set<string>();
-
-  const walk = (id: string, depth: number) => {
-    if (visiting.has(id) || visited.has(id)) {
-      return;
-    }
-    visiting.add(id);
-    const node = nodes.get(id);
-    if (!node) {
-      visiting.delete(id);
-      return;
-    }
-    flat.push({ item: node.item, depth });
-    for (const childId of node.children) {
-      walk(childId, depth + 1);
-    }
-    visiting.delete(id);
-    visited.add(id);
-  };
-
-  for (const rootId of sortedRoots) {
-    walk(rootId, 0);
-  }
-
-  return flat;
-}
-
 export function AdminResourcePage({ resourceKey }: { resourceKey: ResourceKey }) {
+  const isHierarchyResource = resourceKey === "pages-structure" || resourceKey === "categories";
   const config: AdminResource = ADMIN_RESOURCES[resourceKey];
   const [items, setItems] = useState<ItemRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -134,30 +56,73 @@ export function AdminResourcePage({ resourceKey }: { resourceKey: ResourceKey })
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [form, setForm] = useState<Record<string, string | number | boolean>>(defaultForm(config.fields));
   const [relations, setRelations] = useState<Record<string, Array<{ value: string; label: string }>>>({});
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const editorSectionRef = useRef<HTMLDivElement | null>(null);
-
-  const listFields = useMemo(() => {
-    const base = config.fields.filter((field: AdminField) => field.list);
-    if (resourceKey === "pages-structure") {
-      return base
-        .filter((field) => field.key !== "parentId" && field.key !== "orderIndex" && field.key !== "visible")
-        .slice(0, 6);
-    }
-    return base.slice(0, 6);
-  }, [config.fields, resourceKey]);
-
-  const visibleField = useMemo(
-    () => config.fields.find((field) => field.key === "visible" && field.type === "boolean"),
+  const listFields = useMemo(
+    () => config.fields.filter((field: AdminField) => field.list).slice(0, 6),
     [config.fields],
   );
 
-  const displayItems = useMemo(() => {
-    if (resourceKey !== "pages-structure") {
-      return items.map((item) => ({ item, depth: 0 }));
+  const hierarchyOptions = useMemo(() => {
+    if (!isHierarchyResource) {
+      return [];
     }
-    return buildHierarchy(items);
-  }, [items, resourceKey]);
+    const nodes = new Map<string, { item: ItemRecord; children: string[] }>();
+    items.forEach((item) => nodes.set(String(item.id), { item, children: [] }));
+    const roots: string[] = [];
+    items.forEach((item) => {
+      const pId = item.parentId ? String(item.parentId) : "";
+      if (pId && nodes.has(pId)) nodes.get(pId)!.children.push(String(item.id));
+      else roots.push(String(item.id));
+    });
+    const sortFn = (ids: string[]) =>
+      ids.sort(
+        (a, b) => (Number(nodes.get(a)?.item.orderIndex) || 0) - (Number(nodes.get(b)?.item.orderIndex) || 0),
+      );
+    const options: Array<{ value: string; label: string }> = [];
+    const walk = (id: string, depth: number) => {
+      const node = nodes.get(id);
+      if (!node) return;
+      const prefix = depth > 0 ? `${"-- ".repeat(depth)}` : "";
+      const label = String(node.item.title ?? node.item.name ?? "Untitled");
+      options.push({ value: id, label: `${prefix}${label}` });
+      const childIds = sortFn(node.children);
+      childIds.forEach((childId) => walk(childId, depth + 1));
+    };
+    sortFn(roots).forEach((rootId) => walk(rootId, 0));
+    return options;
+  }, [items, isHierarchyResource]);
 
+  const descendantMap = useMemo(() => {
+    if (!isHierarchyResource) {
+      return new Map<string, Set<string>>();
+    }
+    const childrenMap = new Map<string, string[]>();
+    items.forEach((item) => {
+      const parentKey = item.parentId ? String(item.parentId) : "";
+      if (!parentKey) return;
+      const list = childrenMap.get(parentKey) ?? [];
+      list.push(String(item.id));
+      childrenMap.set(parentKey, list);
+    });
+    const map = new Map<string, Set<string>>();
+    const visit = (id: string) => {
+      if (map.has(id)) return map.get(id)!;
+      const set = new Set<string>();
+      const kids = childrenMap.get(id) ?? [];
+      for (const kid of kids) {
+        set.add(kid);
+        const kidSet = visit(kid);
+        kidSet.forEach((v) => set.add(v));
+      }
+      map.set(id, set);
+      return set;
+    };
+    items.forEach((item) => visit(String(item.id)));
+    return map;
+  }, [items, isHierarchyResource]);
+
+  // --- API Actions ---
   async function load() {
     const res = await fetch(`/api/admin/${resourceKey}`);
     const data = await res.json();
@@ -184,7 +149,6 @@ export function AdminResourcePage({ resourceKey }: { resourceKey: ResourceKey })
       setRelations(optionsData.options ?? {});
       setLoading(false);
     }
-
     void bootstrap();
     return () => {
       cancelled = true;
@@ -213,14 +177,14 @@ export function AdminResourcePage({ resourceKey }: { resourceKey: ResourceKey })
       }
       next[field.key] = (item[field.key] as string | number | boolean) ?? next[field.key];
     }
-    setCurrentId(item.id);
+    setCurrentId(String(item.id));
     setForm(next);
     setOpen(true);
   }
 
   async function onDelete(id: string) {
     if (resourceKey === "pages-structure") {
-      const item = items.find((entry) => entry.id === id);
+      const item = items.find((entry) => String(entry.id) === id);
       const slug = String(item?.slug ?? "").replace(/^\//, "");
       if (PROTECTED_PAGES.has(slug)) {
         window.alert("This page is protected and cannot be deleted.");
@@ -255,75 +219,356 @@ export function AdminResourcePage({ resourceKey }: { resourceKey: ResourceKey })
   async function onSubmit() {
     const url = currentId ? `/api/admin/${resourceKey}/${currentId}` : `/api/admin/${resourceKey}`;
     const method = currentId ? "PATCH" : "POST";
-    await fetch(url, {
+    const res = await fetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
     });
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      window.alert(data.error ?? "Save failed");
+      return;
+    }
     setOpen(false);
     setLoading(true);
     await load();
     setLoading(false);
   }
 
-  async function onQuickToggle(item: ItemRecord, field: AdminField) {
-    const current = Boolean(item[field.key]);
-    const res = await fetch(`/api/admin/${resourceKey}/${item.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [field.key]: !current }),
-    });
-    if (!res.ok) {
-      return;
-    }
-    await load();
+  async function moveOrder(itemId: string, direction: "up" | "down") {
+    const item = items.find(i => String(i.id) === itemId);
+    const siblings = items
+      .filter(i => String(i.parentId || "") === String(item?.parentId || ""))
+      .sort((a, b) => (Number(a.orderIndex) || 0) - (Number(b.orderIndex) || 0));
+    
+    const currentIndex = siblings.findIndex(i => String(i.id) === itemId);
+    const swapWith = direction === "up" ? siblings[currentIndex - 1] : siblings[currentIndex + 1];
+
+    if (!swapWith) return;
+
+    await Promise.all([
+      fetch(`/api/admin/${resourceKey}/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderIndex: swapWith.orderIndex }),
+      }),
+      fetch(`/api/admin/${resourceKey}/${swapWith.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderIndex: item?.orderIndex }),
+      })
+    ]);
+    load();
   }
 
+  function readValue(
+    item: ItemRecord,
+    field: AdminField,
+    relationOptions: Record<string, Array<{ value: string; label: string }>>,
+  ) {
+    const value = item[field.key];
+    if (field.type === "boolean") {
+      return value ? "Visible" : "Hidden";
+    }
+    if (field.type === "select") {
+      const options = relationOptions[field.key] ?? [];
+      const matched = options.find((opt) => opt.value === String(value ?? ""));
+      return matched?.label ?? String(value ?? "");
+    }
+    if (field.type === "date" && value) {
+      const date = new Date(String(value));
+      return Number.isNaN(date.getTime()) ? String(value ?? "") : date.toLocaleDateString();
+    }
+    return String(value ?? "");
+  }
+
+  async function onQuickToggle(item: ItemRecord, field: AdminField) {
+    await fetch(`/api/admin/${resourceKey}/${item.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [field.key]: !item[field.key] }),
+    });
+    load();
+  }
+
+  function formatOrder(value: unknown) {
+    const num = Number(value ?? 0);
+    if (!Number.isFinite(num)) {
+      return "000";
+    }
+    return String(Math.max(0, Math.trunc(num))).padStart(3, "0");
+  }
+
+  // --- Hierarchy Logic ---
+  const displayItems = useMemo(() => {
+    if (!isHierarchyResource) {
+      return items.map((item) => ({
+        item,
+        depth: 0,
+        hasChildren: false,
+        isLastChild: false,
+        orderLabel: formatOrder(item.orderIndex),
+      }));
+    }
+
+    const nodes = new Map<string, { item: ItemRecord; children: string[] }>();
+    items.forEach((item) => nodes.set(String(item.id), { item, children: [] }));
+    const roots: string[] = [];
+    items.forEach((item) => {
+      const pId = item.parentId ? String(item.parentId) : "";
+      if (pId && nodes.has(pId)) nodes.get(pId)!.children.push(String(item.id));
+      else roots.push(String(item.id));
+    });
+
+    const sortFn = (ids: string[]) => ids.sort((a, b) => (Number(nodes.get(a)?.item.orderIndex) || 0) - (Number(nodes.get(b)?.item.orderIndex) || 0));
+    const flat: HierarchyItem[] = [];
+
+    const walk = (id: string, depth: number, isHidden: boolean, isLast: boolean, orderIndex: number) => {
+      const node = nodes.get(id);
+      if (!node) return;
+      const hasChildren = node.children.length > 0;
+      if (!isHidden) {
+        flat.push({
+          item: node.item,
+          depth,
+          hasChildren,
+          isLastChild: isLast,
+          orderLabel: formatOrder(orderIndex),
+        });
+      }
+      
+      const childIds = sortFn(node.children);
+      childIds.forEach((cId, i) =>
+        walk(cId, depth + 1, isHidden || collapsedIds.has(id), i === childIds.length - 1, i),
+      );
+    };
+
+    sortFn(roots).forEach((rId, i) => walk(rId, 0, false, i === roots.length - 1, i));
+    return flat;
+  }, [items, isHierarchyResource, collapsedIds]);
+
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">{config.title}</h1>
-          <p className="mt-1 text-sm text-slate-500">{config.subtitle}</p>
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{config.title}</h1>
+          <p className="text-slate-500 text-sm mt-1">{config.subtitle}</p>
         </div>
-        <button
-          className="inline-flex rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+        <button 
           onClick={onCreate}
-          type="button"
+          className="bg-slate-900 hover:bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition shadow-lg"
         >
-          Add New
+          + Add New
         </button>
       </div>
-      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-        <div className="border-b bg-slate-50 px-4 py-3 text-sm font-medium text-slate-600">
-          Records
-        </div>
 
-        {loading ? (
-          <div className="p-6 text-sm text-slate-500">Loading...</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+      {/* Table */}
+      {isHierarchyResource ? (
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+          <table className="w-full text-left border-separate border-spacing-0">
+            <thead className="bg-slate-50/80 text-slate-400 text-[11px] uppercase font-bold tracking-wider">
+              <tr>
+                <th className="px-8 py-4">Name</th>
+                <th className="px-6 py-4 text-center">Visible</th>
+                <th className="px-8 py-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
                 <tr>
-                  {listFields.map((field) => (
-                    <th key={field.key} className="px-4 py-3">
-                      {field.label}
-                    </th>
-                  ))}
-                  {resourceKey === "pages-structure" && visibleField ? (
-                    <th className="px-4 py-3">Visible</th>
-                  ) : null}
-                  <th className="px-4 py-3">Actions</th>
+                  <td colSpan={3} className="p-12 text-center text-slate-400 animate-pulse">
+                    Loading structure...
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {displayItems.map(({ item, depth }) => {
-                  const prefix =
-                    resourceKey === "pages-structure" && depth > 0
-                      ? `${"|  ".repeat(Math.max(0, depth - 1))}+- `
-                      : "";
-                  return (
+              ) : (
+                displayItems.map(({ item, depth, hasChildren, isLastChild, orderLabel }) => (
+                  <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
+                    <td className="px-8 py-4 relative">
+                      <div className="flex items-center" style={{ paddingLeft: depth * 32 }}>
+                        {depth > 0 && (
+                          <div
+                            className="absolute flex items-center"
+                            style={{ left: (depth - 1) * 32 + 42 }}
+                          >
+                            <div
+                              className={`w-[2px] ${
+                                isLastChild ? "h-5 -top-5" : "h-14 -top-5"
+                              } bg-slate-200 absolute`}
+                            />
+                            <div className="w-4 h-[2px] bg-slate-200" />
+                          </div>
+                        )}
+
+                        <div className="z-10 flex items-center gap-3">
+                          {hasChildren ? (
+                            <button
+                              onClick={() =>
+                                setCollapsedIds((prev) => {
+                                  const n = new Set(prev);
+                                  n.has(String(item.id))
+                                    ? n.delete(String(item.id))
+                                    : n.add(String(item.id));
+                                  return n;
+                                })
+                              }
+                              className={`w-6 h-6 rounded-md flex items-center justify-center border border-slate-200 bg-white transition-all shadow-sm ${
+                                collapsedIds.has(String(item.id)) ? "" : "rotate-90"
+                              }`}
+                            >
+                              <svg
+                                className="w-3 h-3 text-slate-500"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                              >
+                                <path d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" />
+                              </svg>
+                            </button>
+                          ) : (
+                            <div className="w-6 h-6 flex items-center justify-center">
+                              <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex min-w-9 justify-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                              {orderLabel}
+                            </span>
+                            <span
+                              className={`text-sm font-bold ${
+                                depth === 0 ? "text-slate-900" : "text-slate-600"
+                              }`}
+                            >
+                              {String(item.title ?? item.name ?? "Untitled")}
+                            </span>
+                            {depth === 0 ? (
+                              <span className="bg-indigo-50 text-indigo-600 text-[9px] font-black px-1.5 py-0.5 rounded uppercase border border-indigo-100">
+                                {resourceKey === "pages-structure" ? "Root Page" : "Root Category"}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-4 text-center">
+                      <button
+                        onClick={() =>
+                          fetch(`/api/admin/${resourceKey}/${item.id}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ visible: !item.visible }),
+                          }).then(load)
+                        }
+                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase transition-all border shadow-sm ${
+                          item.visible
+                            ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+                            : "bg-slate-50 text-slate-400 border-slate-200"
+                        }`}
+                      >
+                        <div
+                          className={`w-1 h-1 rounded-full ${
+                            item.visible ? "bg-emerald-500" : "bg-slate-300"
+                          }`}
+                        />
+                        {item.visible ? "Visible" : "Hidden"}
+                      </button>
+                    </td>
+
+                    <td className="px-8 py-4">
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center bg-slate-100 rounded-lg p-0.5 mr-2">
+                          <button
+                            onClick={() => moveOrder(String(item.id), "up")}
+                            className="p-1.5 hover:text-indigo-600 text-slate-400 transition"
+                            title="Move Up"
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth={3}
+                              viewBox="0 0 24 24"
+                            >
+                              <path d="M5 15l7-7 7 7" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => moveOrder(String(item.id), "down")}
+                            className="p-1.5 hover:text-indigo-600 text-slate-400 transition"
+                            title="Move Down"
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth={3}
+                              viewBox="0 0 24 24"
+                            >
+                              <path d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+                        </div>
+
+                        <button
+                          onClick={() => onEdit(item)}
+                          className="h-9 px-4 bg-white border border-slate-200 text-slate-700 hover:border-indigo-500 hover:text-indigo-600 rounded-lg text-xs font-bold transition shadow-sm"
+                        >
+                          Edit
+                        </button>
+
+                        {resourceKey === "pages-structure" &&
+                        PROTECTED_PAGES.has(String(item.slug || "").replace("/", "")) ? (
+                          <span className="h-9 w-9" aria-hidden />
+                        ) : (
+                          <button
+                            onClick={() => onDelete(String(item.id))}
+                            className="h-9 w-9 flex items-center justify-center bg-red-50 text-red-500 hover:bg-red-500 hover:text-white border border-red-100 rounded-lg transition"
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                            >
+                              <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                {listFields.map((field) => (
+                  <th key={field.key} className="px-4 py-3">
+                    {field.label}
+                  </th>
+                ))}
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td
+                    colSpan={listFields.length + 1}
+                    className="p-6 text-center text-sm text-slate-500"
+                  >
+                    Loading...
+                  </td>
+                </tr>
+              ) : (
+                items.map((item) => (
                   <tr key={item.id} className="border-t">
                     {listFields.map((field) => (
                       <td key={field.key} className="px-4 py-3 text-slate-700">
@@ -339,37 +584,13 @@ export function AdminResourcePage({ resourceKey }: { resourceKey: ResourceKey })
                           >
                             {item[field.key] ? "Visible" : "Hidden"}
                           </button>
-                        ) : field.key === "title" && resourceKey === "pages-structure" ? (
-                          <div className="flex items-center">
-                            <span className="inline-flex items-center font-medium text-slate-800">
-                              {prefix ? (
-                                <span className="mr-2 font-mono text-xs text-slate-400">{prefix}</span>
-                              ) : null}
-                              <span style={{ paddingLeft: depth * 18 }}>{readValue(item, field, relations)}</span>
-                            </span>
-                          </div>
                         ) : (
                           readValue(item, field, relations)
                         )}
                       </td>
                     ))}
-                    {resourceKey === "pages-structure" && visibleField ? (
-                      <td className="px-4 py-3 text-slate-700">
-                        <button
-                          type="button"
-                          onClick={() => onQuickToggle(item, visibleField)}
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium transition ${
-                            item[visibleField.key]
-                              ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
-                              : "bg-slate-200 text-slate-700 hover:bg-slate-300"
-                          }`}
-                        >
-                          {item[visibleField.key] ? "Visible" : "Hidden"}
-                        </button>
-                      </td>
-                    ) : null}
                     <td className="px-4 py-3">
-                      <div className="flex gap-2">
+                      <div className="flex justify-end gap-2">
                         <button
                           className="inline-flex rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
                           onClick={() => onEdit(item)}
@@ -377,26 +598,22 @@ export function AdminResourcePage({ resourceKey }: { resourceKey: ResourceKey })
                         >
                           Edit
                         </button>
-                      {resourceKey === "pages-structure" &&
-                      PROTECTED_PAGES.has(String(item.slug ?? "").replace(/^\//, "")) ? null : (
                         <button
                           className="inline-flex rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
-                          onClick={() => onDelete(item.id)}
+                          onClick={() => onDelete(String(item.id))}
                           type="button"
                         >
                           Delete
                         </button>
-                      )}
                       </div>
                     </td>
                   </tr>
-                );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {open ? (
         <section ref={editorSectionRef} className="rounded-xl border bg-white shadow-sm">
@@ -418,6 +635,17 @@ export function AdminResourcePage({ resourceKey }: { resourceKey: ResourceKey })
               {config.fields.map((field) => {
                 const value = form[field.key];
                 const fieldColSpan = field.type === "textarea" ? "md:col-span-2 xl:col-span-3" : "";
+                const selectOptions =
+                  field.key === "parentId" && isHierarchyResource
+                    ? hierarchyOptions.filter((opt) => {
+                        const current = currentId ? String(currentId) : "";
+                        if (!current) return true;
+                        if (opt.value === current) return false;
+                        const descendants = descendantMap.get(current);
+                        return !descendants?.has(opt.value);
+                      })
+                    : relations[field.key] ?? [];
+
                 return (
                   <div key={field.key} className={`space-y-1.5 ${fieldColSpan}`}>
                     <label htmlFor={field.key} className="text-sm font-medium text-slate-700">
@@ -453,7 +681,7 @@ export function AdminResourcePage({ resourceKey }: { resourceKey: ResourceKey })
                         onChange={(e) => setForm((prev) => ({ ...prev, [field.key]: e.target.value }))}
                       >
                         <option value="">- Top Level -</option>
-                        {(relations[field.key] ?? []).map((opt) => (
+                        {selectOptions.map((opt) => (
                           <option key={opt.value} value={opt.value}>
                             {opt.label}
                           </option>
